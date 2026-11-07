@@ -69,7 +69,7 @@ jobs:
           claude_args: >-
             --model claude-sonnet-5-5
             --max-turns 40
-            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(pnpm lint:*),Bash(pnpm typecheck:*),Bash(pnpm test:*),Bash(pnpm build:*)"
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(pnpm lint:fix),Bash(pnpm lint),Bash(pnpm typecheck),Bash(pnpm test),Bash(pnpm test *),Bash(pnpm build)"
             --disallowedTools "WebFetch,WebSearch"
 
       - name: Open the PR
