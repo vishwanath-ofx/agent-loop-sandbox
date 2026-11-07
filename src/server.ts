@@ -11,6 +11,11 @@ export function handle(req: IncomingMessage, res: ServerResponse): void {
 		res.end("hello");
 		return;
 	}
+	if (req.method === "GET" && url.pathname === "/health") {
+		res.writeHead(200, { "content-type": "application/json" });
+		res.end(JSON.stringify({ ok: true }));
+		return;
+	}
 	res.writeHead(404, { "content-type": "text/plain" });
 	res.end("not found");
 }
