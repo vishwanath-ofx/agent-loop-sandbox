@@ -12,10 +12,11 @@ beforeAll(async () => {
 });
 afterAll(() => server.close());
 
-it("answers hello on /", async () => {
+it("serves the landing page on /", async () => {
 	const res = await fetch(`${base}/`);
 	expect(res.status).toBe(200);
-	expect(await res.text()).toBe("hello");
+	expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+	expect(await res.text()).toContain("How the loop works");
 });
 
 it("answers ok JSON on /health", async () => {
