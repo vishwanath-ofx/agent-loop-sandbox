@@ -13,4 +13,4 @@ Linear issue labeled agent-ready (project "Agent Loop Sandbox")
 
 Secrets: `ANTHROPIC_API_KEY`, `LINEAR_API_KEY`. To go through Vercel AI Gateway instead of Anthropic, set the repo variable `ANTHROPIC_BASE_URL=https://ai-gateway.vercel.sh` and put the gateway key in `ANTHROPIC_API_KEY`.
 
-Merge agent PRs with **squash**: main requires signed commits, and the agent's commits aren't signed.
+Main requires signed commits. The agent commits through GitHub's API (`scripts/signed-commit.mjs`), which GitHub signs; a plain `git push` from a runner would be unsigned and unmergeable.

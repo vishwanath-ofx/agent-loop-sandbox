@@ -82,11 +82,8 @@ jobs:
           fi
           branch="agent/$(echo "$IDENTIFIER" | tr '[:upper:]' '[:lower:]')-${GITHUB_RUN_ID}"
           title="$(head -1 .agent/issue.md | sed 's/^# //')"
-          git switch -c "$branch"
           git add -A
-          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-            commit -q -m "fix: ${title}"
-          git push -q origin "$branch"
+          node scripts/signed-commit.mjs "$branch" "fix: ${title}"
           { cat .agent/summary.md 2>/dev/null; printf '\n\nLinear: %s\nAgent run: %s\n' "$IDENTIFIER" "$RUN_URL"; } > "$RUNNER_TEMP/body.md"
           url="$(gh pr create --head "$branch" --title "fix: ${title}" --body-file "$RUNNER_TEMP/body.md")"
           gh workflow run ci.yml --ref "$branch"
