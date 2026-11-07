@@ -1,0 +1,20 @@
+name: Deploy prod
+
+# Stand-in for opie's deploy-prod: manual, main only, and the `production` environment's required reviewer approves each run.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Require main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "Deploy prod only runs from main, not ${GITHUB_REF}"
+          exit 1
+      - run: echo "Would deploy ${GITHUB_SHA} to prod"

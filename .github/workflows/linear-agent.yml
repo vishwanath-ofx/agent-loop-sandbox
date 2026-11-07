@@ -1,0 +1,107 @@
+name: Linear agent
+
+# Picks the oldest Linear issue labeled agent-ready in the "Agent Loop Sandbox" project, has Claude fix it,
+# and opens a PR. A human applying the label is the gate; the agent never approves or merges.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: linear-agent
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  pick:
+    runs-on: ubuntu-latest
+    outputs:
+      id: ${{ steps.pick.outputs.id }}
+      identifier: ${{ steps.pick.outputs.identifier }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+      - id: pick
+        run: node scripts/linear.mjs pick >> "$GITHUB_OUTPUT"
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+
+  fix:
+    needs: pick
+    if: needs.pick.outputs.id != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    env:
+      ISSUE_ID: ${{ needs.pick.outputs.id }}
+      IDENTIFIER: ${{ needs.pick.outputs.identifier }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+      - run: npm install --global "$(node -p 'require("./package.json").packageManager')"
+      - run: pnpm install --frozen-lockfile
+
+      - name: Fetch the issue
+        run: mkdir -p .agent && node scripts/linear.mjs show "$ISSUE_ID" > .agent/issue.md
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+
+      # Claude gets file tools and the pnpm checks only: no git, no network tools, no Linear key.
+      - name: Claude fixes the issue
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: /fix-linear-issue
+          claude_args: >-
+            --model claude-sonnet-5-5
+            --max-turns 40
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(pnpm lint:*),Bash(pnpm typecheck:*),Bash(pnpm test:*),Bash(pnpm build:*)"
+            --disallowedTools "WebFetch,WebSearch"
+
+      - name: Open the PR
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if grep -q '^BLOCKED:' .agent/summary.md 2>/dev/null || [ -z "$(git status --porcelain)" ]; then
+            echo "no change made"; echo "url=" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          branch="agent/$(echo "$IDENTIFIER" | tr '[:upper:]' '[:lower:]')-${GITHUB_RUN_ID}"
+          title="$(head -1 .agent/issue.md | sed 's/^# //')"
+          git switch -c "$branch"
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "fix: ${title}"
+          git push -q origin "$branch"
+          { cat .agent/summary.md 2>/dev/null; printf '\n\nLinear: %s\nAgent run: %s\n' "$IDENTIFIER" "$RUN_URL"; } > "$RUNNER_TEMP/body.md"
+          url="$(gh pr create --head "$branch" --title "fix: ${title}" --body-file "$RUNNER_TEMP/body.md")"
+          gh workflow run ci.yml --ref "$branch"
+          gh workflow run gitleaks.yml --ref "$branch"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Report to Linear
+        if: always()
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          PR_URL: ${{ steps.pr.outputs.url }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          if [ -n "$PR_URL" ]; then
+            msg="Agent opened a PR: $PR_URL"
+          elif [ -f .agent/summary.md ]; then
+            msg="$(printf 'Agent made no change.\n\n%s\n\nRun: %s' "$(cat .agent/summary.md)" "$RUN_URL")"
+          else
+            msg="Agent run ${JOB_STATUS}: $RUN_URL"
+          fi
+          printf '%s' "$msg" | node scripts/linear.mjs comment "$ISSUE_ID"
