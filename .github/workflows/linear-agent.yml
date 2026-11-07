@@ -92,6 +92,22 @@ jobs:
           gh workflow run gitleaks.yml --ref "$branch"
           echo "url=$url" >> "$GITHUB_OUTPUT"
 
+      # Auto-merged PRs don't trigger deploy-prod (GITHUB_TOKEN pushes start no workflows), so wait for the merge
+      # and dispatch it. A PR waiting on a code owner won't merge in time; the owner's merge triggers deploy itself.
+      - name: Deploy once merged
+        if: steps.pr.outputs.url != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ steps.pr.outputs.url }}
+        run: |
+          for _ in $(seq 1 40); do
+            state="$(gh pr view "$PR_URL" --json state --jq .state)"
+            if [ "$state" = MERGED ]; then gh workflow run deploy-prod.yml --ref main; echo "deploy dispatched"; exit 0; fi
+            [ "$state" = CLOSED ] && { echo "PR closed"; exit 0; }
+            sleep 15
+          done
+          echo "not merged after 10 min (likely waiting on a code owner); the owner's merge will deploy"
+
       - name: Report to Linear
         if: always()
         env:

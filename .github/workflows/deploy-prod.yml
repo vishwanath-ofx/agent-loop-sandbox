@@ -1,20 +1,41 @@
 name: Deploy prod
 
-# Stand-in for opie's deploy-prod: manual, main only, and the `production` environment's required reviewer approves each run.
+# Ships every merge to main once the tests pass on main. No approval step.
+# Merges made by a person trigger this on push; merges the agent auto-merged don't (GitHub skips
+# workflows for GITHUB_TOKEN pushes), so linear-agent.yml dispatches it after its PR merges.
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
+# One deploy at a time; never cancel one midway.
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
 jobs:
-  deploy:
+  test:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+      - run: npm install --global "$(node -p 'require("./package.json").packageManager')"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    # The environment only allows main; it has no reviewers.
     environment: production
     steps:
-      - name: Require main
-        if: github.ref != 'refs/heads/main'
-        run: |
-          echo "Deploy prod only runs from main, not ${GITHUB_REF}"
-          exit 1
       - run: echo "Would deploy ${GITHUB_SHA} to prod"
