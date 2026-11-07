@@ -37,7 +37,7 @@ const [cmd, arg] = process.argv.slice(2);
 if (cmd === "pick") {
 	const d = await gql(
 		`query($project: String!) {
-			issues(first: 1, orderBy: createdAt, filter: {
+			issues(first: 50, orderBy: createdAt, filter: {
 				project: { name: { eq: $project } },
 				labels: { name: { eq: "agent-ready" } },
 				state: { type: { nin: ["completed", "canceled"] } }
@@ -45,7 +45,8 @@ if (cmd === "pick") {
 		}`,
 		{ project: PROJECT },
 	);
-	const issue = d.issues.nodes[0];
+	// Linear returns newest first; take the oldest so issues are worked in the order they were created.
+	const issue = d.issues.nodes.at(-1);
 	if (!issue) process.exit(0); // nothing to do: empty outputs skip the fix job
 	const [ready, working] = await Promise.all([
 		labelId("agent-ready"),
