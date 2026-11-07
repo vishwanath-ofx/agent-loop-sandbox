@@ -8,7 +8,7 @@ Linear issue labeled agent-ready (project "Agent Loop Sandbox")
   → Claude fixes it (/fix-linear-issue), file tools + pnpm checks only
   → PR opened, CI + gitleaks dispatched, result commented on the issue
   → main ruleset: required checks, resolved threads; src/ and test/ auto-merge, CODEOWNERS paths need a person
-  → squash merge → deploy-prod.yml (needs the production reviewer)
+  → squash merge → deploy-prod.yml: tests on main, then deploy (no approval)
 ```
 
 Secrets: `ANTHROPIC_API_KEY`, `LINEAR_API_KEY`. To go through Vercel AI Gateway instead of Anthropic, set the repo variable `ANTHROPIC_BASE_URL=https://ai-gateway.vercel.sh` and put the gateway key in `ANTHROPIC_API_KEY`.
