@@ -14,3 +14,5 @@ Linear issue moved to Todo (project "Agent Loop Sandbox"); the agent moves it In
 Secrets: `ANTHROPIC_API_KEY`, `LINEAR_API_KEY`. To go through Vercel AI Gateway instead of Anthropic, set the repo variable `ANTHROPIC_BASE_URL=https://ai-gateway.vercel.sh` and put the gateway key in `ANTHROPIC_API_KEY`.
 
 Main requires signed commits. The agent commits through GitHub's API (`scripts/signed-commit.mjs`), which GitHub signs; a plain `git push` from a runner would be unsigned and unmergeable.
+
+GitHub Issues trigger (`issue-agent.yml`): the owner adds the label `agent` to an issue and the agent starts immediately. Its PR says `Fixes #N`, so the issue closes when the PR merges.

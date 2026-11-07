@@ -1,0 +1,111 @@
+name: Issue agent
+
+# GitHub Issues version of linear-agent.yml: labeling an issue "agent" starts Claude on it immediately.
+# Only people with triage/write access can add labels, so the label is the human gate.
+on:
+  issues:
+    types: [labeled]
+
+concurrency:
+  group: issue-agent-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  fix:
+    if: github.event.label.name == 'agent' && github.event.sender.login == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      ISSUE: ${{ github.event.issue.number }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+      - run: npm install --global "$(node -p 'require("./package.json").packageManager')"
+      - run: pnpm install --frozen-lockfile
+
+      # Title and body go through env, never ${{ }} in the script, so issue text can't inject shell.
+      - name: Claim the issue
+        env:
+          TITLE: ${{ github.event.issue.title }}
+          BODY: ${{ github.event.issue.body }}
+        run: |
+          mkdir -p .agent
+          printf '# #%s: %s\n\n%s\n' "$ISSUE" "$TITLE" "$BODY" > .agent/issue.md
+          gh issue edit "$ISSUE" --remove-label agent --add-label agent-working
+          gh issue comment "$ISSUE" --body "Agent picked this up: $RUN_URL"
+
+      - name: Claude fixes the issue
+        uses: anthropics/claude-code-action@v1
+        env:
+          ANTHROPIC_BASE_URL: ${{ vars.ANTHROPIC_BASE_URL }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: /fix-linear-issue
+          claude_args: >-
+            --model claude-sonnet-5-5
+            --max-turns 40
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(pnpm lint:fix),Bash(pnpm lint),Bash(pnpm typecheck),Bash(pnpm test),Bash(pnpm test *),Bash(pnpm build)"
+            --disallowedTools "WebFetch,WebSearch"
+
+      - name: Open the PR
+        id: pr
+        run: |
+          if grep -q '^BLOCKED:' .agent/summary.md 2>/dev/null || [ -z "$(git status --porcelain)" ]; then
+            echo "no change made"; echo "url=" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          branch="agent/issue-${ISSUE}-${GITHUB_RUN_ID}"
+          title="$(head -1 .agent/issue.md | sed 's/^# #[0-9]*: //')"
+          git add -A
+          node scripts/signed-commit.mjs "$branch" "fix: ${title}"
+          { cat .agent/summary.md 2>/dev/null; printf '\n\nFixes #%s\nAgent run: %s\n' "$ISSUE" "$RUN_URL"; } > "$RUNNER_TEMP/body.md"
+          url="$(gh pr create --head "$branch" --title "fix: ${title} (#${ISSUE})" --body-file "$RUNNER_TEMP/body.md")"
+          gh pr merge "$url" --auto --squash --delete-branch
+          gh workflow run ci.yml --ref "$branch"
+          gh workflow run gitleaks.yml --ref "$branch"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Report on the issue
+        if: always()
+        env:
+          PR_URL: ${{ steps.pr.outputs.url }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          gh issue edit "$ISSUE" --remove-label agent-working || true
+          if [ -n "$PR_URL" ]; then
+            gh issue comment "$ISSUE" --body "Agent opened a PR: $PR_URL (it closes this issue when it merges)"
+          else
+            gh issue edit "$ISSUE" --add-label agent-blocked
+            if [ -f .agent/summary.md ]; then
+              { printf 'Agent made no change.\n\n'; cat .agent/summary.md; printf '\n\nRun: %s\n' "$RUN_URL"; } > "$RUNNER_TEMP/c.md"
+            else
+              printf 'Agent run %s: %s\n' "$JOB_STATUS" "$RUN_URL" > "$RUNNER_TEMP/c.md"
+            fi
+            gh issue comment "$ISSUE" --body-file "$RUNNER_TEMP/c.md"
+          fi
+
+      # Auto-merged PRs don't trigger deploy-prod (GITHUB_TOKEN pushes start no workflows): wait, then dispatch it.
+      - name: Deploy once merged
+        if: steps.pr.outputs.url != ''
+        env:
+          PR_URL: ${{ steps.pr.outputs.url }}
+        run: |
+          for _ in $(seq 1 40); do
+            state="$(gh pr view "$PR_URL" --json state --jq .state)"
+            if [ "$state" = MERGED ]; then gh workflow run deploy-prod.yml --ref main; echo "deploy dispatched"; exit 0; fi
+            [ "$state" = CLOSED ] && { echo "PR closed"; exit 0; }
+            sleep 15
+          done
+          echo "not merged after 10 min; the owner's merge will deploy"
