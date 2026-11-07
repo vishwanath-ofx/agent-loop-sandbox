@@ -21,6 +21,11 @@ export function handle(req: IncomingMessage, res: ServerResponse): void {
 		res.end(JSON.stringify({ version: "0.1.0" }));
 		return;
 	}
+	if (req.method === "GET" && url.pathname === "/time") {
+		res.writeHead(200, { "content-type": "application/json" });
+		res.end(JSON.stringify({ epochMs: Date.now() }));
+		return;
+	}
 	res.writeHead(404, { "content-type": "text/plain" });
 	res.end("not found");
 }
