@@ -4,11 +4,27 @@ import {
 	type ServerResponse,
 } from "node:http";
 
+const LANDING_PAGE = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Loop Sandbox</title>
+</head>
+<body>
+<h1>Agent Loop Sandbox</h1>
+<p>A toy repo for testing the Linear → agent → PR → review loop.</p>
+<h2>How the loop works</h2>
+<p>Coming soon.</p>
+</body>
+</html>
+`;
+
 export function handle(req: IncomingMessage, res: ServerResponse): void {
 	const url = new URL(req.url ?? "/", "http://localhost");
 	if (req.method === "GET" && url.pathname === "/") {
-		res.writeHead(200, { "content-type": "text/plain" });
-		res.end("hello");
+		res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+		res.end(LANDING_PAGE);
 		return;
 	}
 	if (req.method === "GET" && url.pathname === "/health") {
