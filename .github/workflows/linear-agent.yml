@@ -1,7 +1,7 @@
 name: Linear agent
 
-# Picks the oldest Linear issue labeled agent-ready in the "Agent Loop Sandbox" project, has Claude fix it,
-# and opens a PR. A human applying the label is the gate; the agent never approves or merges.
+# Picks the oldest Todo issue in the "Agent Loop Sandbox" Linear project, has Claude fix it, and opens a PR.
+# Statuses: Todo (a person approved it) -> In Progress -> Code Review (PR open) -> Done (deploy-prod shipped it), or Blocked.
 on:
   schedule:
     - cron: "*/15 * * * *"
@@ -92,6 +92,24 @@ jobs:
           gh workflow run gitleaks.yml --ref "$branch"
           echo "url=$url" >> "$GITHUB_OUTPUT"
 
+      # Before the merge wait: deploy-prod moves the issue to Done, and this must not overwrite that.
+      - name: Report to Linear
+        if: always()
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          PR_URL: ${{ steps.pr.outputs.url }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          if [ -n "$PR_URL" ]; then
+            status="Code Review"; msg="Agent opened a PR: $PR_URL"
+          elif [ -f .agent/summary.md ]; then
+            status="Blocked"; msg="$(printf 'Agent made no change.\n\n%s\n\nRun: %s' "$(cat .agent/summary.md)" "$RUN_URL")"
+          else
+            status="Blocked"; msg="Agent run ${JOB_STATUS}: $RUN_URL"
+          fi
+          node scripts/linear.mjs status "$ISSUE_ID" "$status"
+          printf '%s' "$msg" | node scripts/linear.mjs comment "$ISSUE_ID"
+
       # Auto-merged PRs don't trigger deploy-prod (GITHUB_TOKEN pushes start no workflows), so wait for the merge
       # and dispatch it. A PR waiting on a code owner won't merge in time; the owner's merge triggers deploy itself.
       - name: Deploy once merged
@@ -107,19 +125,3 @@ jobs:
             sleep 15
           done
           echo "not merged after 10 min (likely waiting on a code owner); the owner's merge will deploy"
-
-      - name: Report to Linear
-        if: always()
-        env:
-          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
-          PR_URL: ${{ steps.pr.outputs.url }}
-          JOB_STATUS: ${{ job.status }}
-        run: |
-          if [ -n "$PR_URL" ]; then
-            msg="Agent opened a PR: $PR_URL"
-          elif [ -f .agent/summary.md ]; then
-            msg="$(printf 'Agent made no change.\n\n%s\n\nRun: %s' "$(cat .agent/summary.md)" "$RUN_URL")"
-          else
-            msg="Agent run ${JOB_STATUS}: $RUN_URL"
-          fi
-          printf '%s' "$msg" | node scripts/linear.mjs comment "$ISSUE_ID"

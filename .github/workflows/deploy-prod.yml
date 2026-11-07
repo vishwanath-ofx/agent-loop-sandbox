@@ -38,4 +38,15 @@ jobs:
     # The environment only allows main; it has no reviewers.
     environment: production
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
       - run: echo "Would deploy ${GITHUB_SHA} to prod"
+      # Squash commits carry the PR body, which names the Linear issue ("Linear: PLA-123"). Shipped = Done.
+      - name: Mark the Linear issue Done
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+        run: |
+          issue="$(git log -1 --format=%B | sed -n 's/^Linear: \([A-Z]*-[0-9]*\)$/\1/p' | head -1)"
+          if [ -n "$issue" ]; then node scripts/linear.mjs status "$issue" "Done" && echo "$issue -> Done"; else echo "no Linear issue in this commit"; fi
