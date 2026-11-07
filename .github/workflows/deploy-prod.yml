@@ -1,8 +1,7 @@
 name: Deploy prod
 
-# Ships every merge to main once the tests pass on main. No approval step.
-# Merges made by a person trigger this on push; merges the agent auto-merged don't (GitHub skips
-# workflows for GITHUB_TOKEN pushes), so linear-agent.yml dispatches it after its PR merges.
+# Ships every merge to main once the tests pass on main. No approval step. Agent PRs are merged with
+# the agent's GitHub App token, so their merge pushes trigger this too.
 on:
   push:
     branches: [main]

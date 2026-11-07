@@ -72,10 +72,19 @@ jobs:
             --allowedTools "Read,Edit,Write,Glob,Grep,Bash(pnpm lint:fix),Bash(pnpm lint),Bash(pnpm typecheck),Bash(pnpm test),Bash(pnpm test *),Bash(pnpm build)"
             --disallowedTools "WebFetch,WebSearch"
 
+      # PRs opened and merged with a GitHub App token behave like a person's: CI runs without the
+      # "action_required" hold, and the auto-merge push triggers deploy-prod.
+      - name: Agent app token
+        id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+
       - name: Open the PR
         id: pr
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
         run: |
           if grep -q '^BLOCKED:' .agent/summary.md 2>/dev/null || [ -z "$(git status --porcelain)" ]; then
             echo "no change made"; echo "url=" >> "$GITHUB_OUTPUT"; exit 0
@@ -86,10 +95,8 @@ jobs:
           node scripts/signed-commit.mjs "$branch" "fix: ${title}"
           { cat .agent/summary.md 2>/dev/null; printf '\n\nLinear: %s\nAgent run: %s\n' "$IDENTIFIER" "$RUN_URL"; } > "$RUNNER_TEMP/body.md"
           url="$(gh pr create --head "$branch" --title "fix: ${title}" --body-file "$RUNNER_TEMP/body.md")"
-          # Merges by itself once required checks pass, unless the PR touches a CODEOWNERS path (then it waits for a person).
+          # Merges by itself once required checks pass, unless it touches a CODEOWNERS path (then it waits for a person).
           gh pr merge "$url" --auto --squash --delete-branch
-          gh workflow run ci.yml --ref "$branch"
-          gh workflow run gitleaks.yml --ref "$branch"
           echo "url=$url" >> "$GITHUB_OUTPUT"
 
       # Before the merge wait: deploy-prod moves the issue to Done, and this must not overwrite that.
@@ -109,19 +116,3 @@ jobs:
           fi
           node scripts/linear.mjs status "$ISSUE_ID" "$status"
           printf '%s' "$msg" | node scripts/linear.mjs comment "$ISSUE_ID"
-
-      # Auto-merged PRs don't trigger deploy-prod (GITHUB_TOKEN pushes start no workflows), so wait for the merge
-      # and dispatch it. A PR waiting on a code owner won't merge in time; the owner's merge triggers deploy itself.
-      - name: Deploy once merged
-        if: steps.pr.outputs.url != ''
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_URL: ${{ steps.pr.outputs.url }}
-        run: |
-          for _ in $(seq 1 40); do
-            state="$(gh pr view "$PR_URL" --json state --jq .state)"
-            if [ "$state" = MERGED ]; then gh workflow run deploy-prod.yml --ref main; echo "deploy dispatched"; exit 0; fi
-            [ "$state" = CLOSED ] && { echo "PR closed"; exit 0; }
-            sleep 15
-          done
-          echo "not merged after 10 min (likely waiting on a code owner); the owner's merge will deploy"
