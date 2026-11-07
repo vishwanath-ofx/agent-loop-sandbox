@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Minimal Linear client for the agent workflow.
-//   pick            claim the oldest agent-ready issue in $LINEAR_PROJECT: swap its label to agent-working, print id= and identifier=
-//   show <id>       print the issue as markdown
-//   comment <id>    post stdin as a comment
+//   pick                 claim the oldest Todo issue in $LINEAR_PROJECT: move it to In Progress, print id= and identifier=
+//   show <id>            print the issue as markdown
+//   comment <id>         post stdin as a comment
+//   status <id> <name>   move the issue to that workflow status (id may be an identifier like PLA-123)
 const KEY = process.env.LINEAR_API_KEY;
 const PROJECT = process.env.LINEAR_PROJECT ?? "Agent Loop Sandbox";
 const TEAM = process.env.LINEAR_TEAM ?? "PLA";
@@ -22,25 +23,33 @@ async function gql(query, variables = {}) {
 	return json.data;
 }
 
-async function labelId(name) {
+async function setStatus(id, name) {
 	const d = await gql(
-		`query($name: String!, $team: String!) { issueLabels(filter: { name: { eq: $name }, team: { key: { eq: $team } } }) { nodes { id } } }`,
-		{ name, team: TEAM },
+		`query($id: String!, $name: String!, $team: String!) {
+			issue(id: $id) { id }
+			workflowStates(filter: { name: { eq: $name }, team: { key: { eq: $team } } }) { nodes { id } }
+		}`,
+		{ id, name, team: TEAM },
 	);
-	const id = d.issueLabels.nodes[0]?.id;
-	if (!id) throw new Error(`label ${name} not found in team ${TEAM}`);
-	return id;
+	const stateId = d.workflowStates.nodes[0]?.id;
+	if (!stateId) throw new Error(`status ${name} not found in team ${TEAM}`);
+	await gql(
+		`mutation($id: String!, $s: String!) { issueUpdate(id: $id, input: { stateId: $s }) { success } }`,
+		{
+			id: d.issue.id,
+			s: stateId,
+		},
+	);
 }
 
-const [cmd, arg] = process.argv.slice(2);
+const [cmd, arg, arg2] = process.argv.slice(2);
 
 if (cmd === "pick") {
 	const d = await gql(
 		`query($project: String!) {
 			issues(first: 50, orderBy: createdAt, filter: {
 				project: { name: { eq: $project } },
-				labels: { name: { eq: "agent-ready" } },
-				state: { type: { nin: ["completed", "canceled"] } }
+				state: { name: { eq: "Todo" } }
 			}) { nodes { id identifier } }
 		}`,
 		{ project: PROJECT },
@@ -48,18 +57,7 @@ if (cmd === "pick") {
 	// Linear returns newest first; take the oldest so issues are worked in the order they were created.
 	const issue = d.issues.nodes.at(-1);
 	if (!issue) process.exit(0); // nothing to do: empty outputs skip the fix job
-	const [ready, working] = await Promise.all([
-		labelId("agent-ready"),
-		labelId("agent-working"),
-	]);
-	await gql(
-		`mutation($id: String!, $l: String!) { issueAddLabel(id: $id, labelId: $l) { success } }`,
-		{ id: issue.id, l: working },
-	);
-	await gql(
-		`mutation($id: String!, $l: String!) { issueRemoveLabel(id: $id, labelId: $l) { success } }`,
-		{ id: issue.id, l: ready },
-	);
+	await setStatus(issue.id, "In Progress");
 	console.log(`id=${issue.id}\nidentifier=${issue.identifier}`);
 } else if (cmd === "show") {
 	const d = await gql(
@@ -78,7 +76,11 @@ if (cmd === "pick") {
 			body: Buffer.concat(chunks).toString(),
 		},
 	);
+} else if (cmd === "status") {
+	await setStatus(arg, arg2);
 } else {
-	console.error("usage: linear.mjs pick | show <id> | comment <id> < body");
+	console.error(
+		"usage: linear.mjs pick | show <id> | comment <id> < body | status <id> <name>",
+	);
 	process.exit(2);
 }

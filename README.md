@@ -3,7 +3,7 @@
 A toy repo for testing a Linear → Claude → PR → review loop end to end. Public, so keep issues toy-only: Actions logs are readable by anyone.
 
 ```
-Linear issue labeled agent-ready (project "Agent Loop Sandbox")
+Linear issue moved to Todo (project "Agent Loop Sandbox"); the agent moves it In Progress -> Code Review -> Done, or Blocked
   → linear-agent.yml (every 15 min, or Run workflow)
   → Claude fixes it (/fix-linear-issue), file tools + pnpm checks only
   → PR opened, CI + gitleaks dispatched, result commented on the issue
