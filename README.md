@@ -16,3 +16,5 @@ Secrets: `ANTHROPIC_API_KEY`, `LINEAR_API_KEY`. To go through Vercel AI Gateway 
 Main requires signed commits. The agent commits through GitHub's API (`scripts/signed-commit.mjs`), which GitHub signs; a plain `git push` from a runner would be unsigned and unmergeable.
 
 GitHub Issues trigger (`issue-agent.yml`): the owner adds the label `agent` to an issue and the agent starts immediately. Its PR says `Fixes #N`, so the issue closes when the PR merges.
+
+The agents open and merge PRs as a GitHub App (`AGENT_APP_ID` variable, `AGENT_APP_PRIVATE_KEY` secret; permissions: Contents and Pull requests read & write, no Workflows). That avoids GitHub's hold on bot-opened PRs and lets the merge trigger deploy.
