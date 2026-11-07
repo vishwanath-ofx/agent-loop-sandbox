@@ -1,2 +1,11 @@
-# Every path needs the owner. Sole owner on purpose: this is a one-person sandbox.
-* @vishwanath-ofx
+# Paths that always need a person. Everything else (src/, test/) merges on green checks alone.
+/.github/       @vishwanath-ofx
+/.claude/       @vishwanath-ofx
+/scripts/       @vishwanath-ofx
+/package.json   @vishwanath-ofx
+/pnpm-lock.yaml @vishwanath-ofx
+/AGENTS.md      @vishwanath-ofx
+/CLAUDE.md      @vishwanath-ofx
+/REVIEW.md      @vishwanath-ofx
+/biome.json     @vishwanath-ofx
+/tsconfig.json  @vishwanath-ofx
