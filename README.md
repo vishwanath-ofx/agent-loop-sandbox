@@ -11,6 +11,6 @@ Linear issue labeled agent-ready (project "Agent Loop Sandbox")
   → squash merge → deploy-prod.yml (needs the production reviewer)
 ```
 
-Secrets: `ANTHROPIC_API_KEY`, `LINEAR_API_KEY`.
+Secrets: `ANTHROPIC_API_KEY`, `LINEAR_API_KEY`. To go through Vercel AI Gateway instead of Anthropic, set the repo variable `ANTHROPIC_BASE_URL=https://ai-gateway.vercel.sh` and put the gateway key in `ANTHROPIC_API_KEY`.
 
 Merge agent PRs with **squash**: main requires signed commits, and the agent's commits aren't signed.

@@ -59,6 +59,9 @@ jobs:
       # Claude gets file tools and the pnpm checks only: no git, no network tools, no Linear key.
       - name: Claude fixes the issue
         uses: anthropics/claude-code-action@v1
+        env:
+          # Empty = Anthropic directly. https://ai-gateway.vercel.sh = Vercel AI Gateway; the gateway key then goes in ANTHROPIC_API_KEY.
+          ANTHROPIC_BASE_URL: ${{ vars.ANTHROPIC_BASE_URL }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
