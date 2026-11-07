@@ -18,6 +18,13 @@ it("answers hello on /", async () => {
 	expect(await res.text()).toBe("hello");
 });
 
+it("answers ok JSON on /health", async () => {
+	const res = await fetch(`${base}/health`);
+	expect(res.status).toBe(200);
+	expect(res.headers.get("content-type")).toBe("application/json");
+	expect(await res.json()).toEqual({ ok: true });
+});
+
 it("404s unknown paths", async () => {
 	expect((await fetch(`${base}/nope`)).status).toBe(404);
 });
