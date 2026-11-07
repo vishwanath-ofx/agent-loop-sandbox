@@ -25,6 +25,13 @@ it("answers ok JSON on /health", async () => {
 	expect(await res.json()).toEqual({ ok: true });
 });
 
+it("answers the version JSON on /version", async () => {
+	const res = await fetch(`${base}/version`);
+	expect(res.status).toBe(200);
+	expect(res.headers.get("content-type")).toBe("application/json");
+	expect(await res.json()).toEqual({ version: "0.1.0" });
+});
+
 it("404s unknown paths", async () => {
 	expect((await fetch(`${base}/nope`)).status).toBe(404);
 });

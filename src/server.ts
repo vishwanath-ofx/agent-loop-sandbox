@@ -16,6 +16,11 @@ export function handle(req: IncomingMessage, res: ServerResponse): void {
 		res.end(JSON.stringify({ ok: true }));
 		return;
 	}
+	if (req.method === "GET" && url.pathname === "/version") {
+		res.writeHead(200, { "content-type": "application/json" });
+		res.end(JSON.stringify({ version: "0.1.0" }));
+		return;
+	}
 	res.writeHead(404, { "content-type": "text/plain" });
 	res.end("not found");
 }
